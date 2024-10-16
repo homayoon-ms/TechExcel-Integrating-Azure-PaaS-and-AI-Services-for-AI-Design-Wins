@@ -1,8 +1,9 @@
 @description('Location of the resources')
 param location string = resourceGroup().location
 
+@secure()
 @description('Password for the SQL Server admin user. PLEASE CHANGE THIS BEFORE DEPLOYMENT!')
-param sqlAdminPassword string = 'g@G9@2nD7C1BP%uh'
+param sqlAdminPassword string =newGuid()
 
 @description('Model deployments for OpenAI')
 param deployments array = [
