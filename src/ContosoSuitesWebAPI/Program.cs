@@ -8,8 +8,17 @@ using Microsoft.Data.SqlClient;
 using Azure.AI.OpenAI;
 using Azure;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.Connectors.OpenAI;
+using Microsoft.SemanticKernel.ChatCompletion;
+
 
 var builder = WebApplication.CreateBuilder(args);
+//Adding new config here-homdj
+var config = new ConfigurationBuilder()
+    .AddUserSecrets<Program>()
+    .AddEnvironmentVariables()
+    .Build();
 
 // Add services to the container.
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
@@ -29,6 +38,19 @@ builder.Services.AddSingleton<CosmosClient>((_) =>
     );
     return client;
 });
+//Adding a singleton of type Microsoft.SemanticKernel.Kernel here-homdj
+builder.Services.AddSingleton<Kernel>((_) =>
+ {
+    IKernelBuilder kernelBuilder = Kernel.CreateBuilder();
+     kernelBuilder.AddAzureOpenAIChatCompletion(
+         deploymentName: builder.Configuration["AzureOpenAI:DeploymentName"]!,
+         endpoint: builder.Configuration["AzureOpenAI:Endpoint"]!,
+         apiKey: builder.Configuration["AzureOpenAI:ApiKey"]!
+    );
+    kernelBuilder.Plugins.AddFromType<DatabaseService>();
+    return kernelBuilder.Build();
+
+ });
 
 // Create a single instance of the AzureOpenAIClient to be shared across the application.
 builder.Services.AddSingleton<AzureOpenAIClient>((_) =>
@@ -91,11 +113,20 @@ app.MapGet("/Hotels/{hotelId}/Bookings/{min_date}", async (int hotelId, DateTime
     .WithOpenApi();
 
 // This endpoint is used to send a message to the Azure OpenAI endpoint.
+//Changed the content of this MapPost - homdj
 app.MapPost("/Chat", async Task<string> (HttpRequest request) =>
 {
     var message = await Task.FromResult(request.Form["message"]);
-    
-    return "This endpoint is not yet available.";
+    var kernel = app.Services.GetRequiredService<Kernel>();
+    var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
+    var executionSettings = new OpenAIPromptExecutionSettings
+    {
+         ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions
+    };
+    var response = await chatCompletionService.GetChatMessageContentAsync(message.ToString(), executionSettings, kernel);
+    return response?.Content!;
+
+    //return "This endpoint is not yet available.";
 })
     .WithName("Chat")
     .WithOpenApi();
